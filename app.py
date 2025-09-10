@@ -3,29 +3,31 @@ from pydantic import BaseModel
 import torch
 import torch.nn.functional as F
 from transformers import XLMRobertaTokenizer, XLMRobertaForSequenceClassification
+from huggingface_hub import hf_hub_download
 
-# Paths
-MODEL_PATH = r"D:\API\xlmr_depression_classifier.pt"
+# Hugging Face repo + file
+REPO_ID = "Aroojzahra908/model"   # your HF repo
+FILENAME = "xlmr_depression_classifier.pt"
 MODEL_NAME = "xlm-roberta-base"
+
+# Download model file from Hugging Face Hub
+model_path = hf_hub_download(repo_id=REPO_ID, filename=FILENAME)
 
 # Load tokenizer
 tokenizer = XLMRobertaTokenizer.from_pretrained(MODEL_NAME)
 
-# Load model (same architecture used in training)
-model = XLMRobertaForSequenceClassification.from_pretrained(
-    MODEL_NAME,
-    num_labels=2
-)
+# Load model architecture
+model = XLMRobertaForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
 
 # Load trained weights
-state_dict = torch.load(MODEL_PATH, map_location="cpu")
-model.load_state_dict(state_dict, strict=False)   # strict=False ignores name mismatches
+state_dict = torch.load(model_path, map_location="cpu")
+model.load_state_dict(state_dict, strict=False)
 model.eval()
 
 # FastAPI app
 app = FastAPI()
 
-# Request format
+# Input schema
 class InputText(BaseModel):
     text: str
 
@@ -38,6 +40,7 @@ def predict(data: InputText):
         padding=True,
         max_length=128
     )
+
     with torch.no_grad():
         outputs = model(**inputs)
         logits = outputs.logits
@@ -45,4 +48,4 @@ def predict(data: InputText):
         pred = torch.argmax(probs, dim=1).item()
 
     label = "Depressed" if pred == 1 else "Non-Depressed"
-    return { "prediction": label}
+    return {"input": data.text, "prediction": label}
